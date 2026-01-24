@@ -70,6 +70,32 @@ export class AppFinanzasStack extends Stack {
       }
     )
 
+    const getExpensesLambda = new NodejsFunction(
+      this,
+      'GetExpensesLambda',
+    {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        entry: path.join(
+          __dirname,
+          '../../services/expenses/getExpenses/handler.ts'
+        ),
+        handler: 'main',
+        memorySize: 256,
+        timeout: Duration.seconds(10),
+        environment: {
+          TABLE_NAME: table.tableName
+        },
+        bundling: {
+          minify: true,
+          sourceMap: true,
+          target: 'node20'
+        }
+      }
+    )
+
+    // Permisos DynamoDB
+    table.grantReadData(getExpensesLambda)
+
     // Permisos mínimos
     table.grantReadWriteData(createExpenseLambda)
 
@@ -88,6 +114,11 @@ export class AppFinanzasStack extends Stack {
     expenses.addMethod(
   'POST',
   new apigateway.LambdaIntegration(createExpenseLambda)
+)
+
+    expenses.addMethod(
+  'GET',
+  new apigateway.LambdaIntegration(getExpensesLambda)
 )
   }
 }
