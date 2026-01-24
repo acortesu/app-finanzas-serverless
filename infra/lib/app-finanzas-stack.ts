@@ -86,12 +86,8 @@ export class AppFinanzasStack extends Stack {
     const expenses = api.root.addResource('expenses')
 
     expenses.addMethod(
-      'POST',
-      new apigateway.LambdaIntegration(createExpenseLambda),
-      {
-        authorizationType: apigateway.AuthorizationType.CUSTOM
-        // Aquí luego conectas Cognito o Custom Authorizer
-      }
-    )
+  'POST',
+  new apigateway.LambdaIntegration(createExpenseLambda)
+)
   }
 }

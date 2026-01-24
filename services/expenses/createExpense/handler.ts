@@ -18,7 +18,8 @@ export const main = async (
     // 1️⃣ Obtener userId desde el authorizer
     const userId =
       event.requestContext.authorizer?.principalId ||
-      event.requestContext.authorizer?.userId
+      event.requestContext.authorizer?.userId ||
+      'dev-user'
 
     if (!userId) {
       return response(401, {
