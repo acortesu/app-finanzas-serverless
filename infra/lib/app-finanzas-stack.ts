@@ -2,28 +2,50 @@ import { Stack, StackProps, RemovalPolicy, Duration } from 'aws-cdk-lib'
 import { Construct } from 'constructs'
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
 import * as apigateway from 'aws-cdk-lib/aws-apigateway'
-import * as iam from 'aws-cdk-lib/aws-iam'
-import * as path from 'path'
-import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
+import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
+import * as path from 'path'
+
+/**
+ * Props extendidas para manejar entornos (dev / prod)
+ */
+export type AppFinanzasStackProps = StackProps & {
+  stage: string
+}
 
 export class AppFinanzasStack extends Stack {
-  constructor(scope: Construct, id: string, props?: StackProps) {
+  constructor(
+    scope: Construct,
+    id: string,
+    props: AppFinanzasStackProps
+  ) {
     super(scope, id, props)
 
+    const { stage } = props
+
     /*
-     * DynamoDB
+     * DynamoDB – Single Table
      */
     const table = new dynamodb.Table(this, 'FinanzasTable', {
-      tableName: 'app-finanzas',
-      partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
+      tableName: `app-finanzas-${stage}`,
+      partitionKey: {
+        name: 'PK',
+        type: dynamodb.AttributeType.STRING
+      },
+      sortKey: {
+        name: 'SK',
+        type: dynamodb.AttributeType.STRING
+      },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: RemovalPolicy.RETAIN
+      removalPolicy:
+        stage === 'prod'
+          ? RemovalPolicy.RETAIN
+          : RemovalPolicy.DESTROY
     })
 
     /*
-     * Lambda – createExpense (TypeScript → esbuild)
+     * Lambda – createExpense
+     * TypeScript → esbuild (Node 20)
      */
     const createExpenseLambda = new NodejsFunction(
       this,
@@ -48,14 +70,17 @@ export class AppFinanzasStack extends Stack {
       }
     )
 
+    // Permisos mínimos
     table.grantReadWriteData(createExpenseLambda)
 
     /*
-     * API Gateway
+     * API Gateway – REST API
      */
     const api = new apigateway.RestApi(this, 'FinanzasApi', {
-      restApiName: 'Finanzas Service',
-      deployOptions: { stageName: 'dev' }
+      restApiName: `Finanzas Service (${stage})`,
+      deployOptions: {
+        stageName: stage
+      }
     })
 
     const expenses = api.root.addResource('expenses')
@@ -65,6 +90,7 @@ export class AppFinanzasStack extends Stack {
       new apigateway.LambdaIntegration(createExpenseLambda),
       {
         authorizationType: apigateway.AuthorizationType.CUSTOM
+        // Aquí luego conectas Cognito o Custom Authorizer
       }
     )
   }
