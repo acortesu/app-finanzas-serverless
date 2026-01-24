@@ -7,29 +7,28 @@ import {
 
 import { getExpensesService } from './service'
 import { ValidationError } from './schema'
-import { DomainError } from '../createExpense/service' // reutilizamos DomainError
 
 export const main = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
   try {
-    // 1️⃣ Obtener userId (temporal en dev)
+    // 🔐 userId (temporal en dev)
     const userId =
       event.requestContext.authorizer?.principalId ||
       event.requestContext.authorizer?.userId ||
       'dev-user'
 
-    // 2️⃣ Query params
+    // 🧾 Query params
     const queryParams = event.queryStringParameters || {}
 
-    // 3️⃣ Ejecutar caso de uso
+    // 🚀 Ejecutar caso de uso
     const result = await getExpensesService({
       userId,
       queryParams
     })
 
     return response(200, result)
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('getExpenses error:', error)
 
     if (error instanceof ValidationError) {
@@ -39,23 +38,20 @@ export const main = async (
       })
     }
 
-    if (error instanceof DomainError) {
+    if (error instanceof Error) {
       return response(500, {
-        error: 'DOMAIN_ERROR',
+        error: 'INTERNAL_ERROR',
         message: error.message
       })
     }
 
     return response(500, {
-      error: 'INTERNAL_SERVER_ERROR',
+      error: 'UNKNOWN_ERROR',
       message: 'Unexpected error'
     })
   }
 }
 
-/**
- * Helper para responses HTTP
- */
 function response(
   statusCode: number,
   body: Record<string, unknown>

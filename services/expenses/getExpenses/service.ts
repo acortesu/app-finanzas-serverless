@@ -2,21 +2,20 @@
 
 import {
   validateGetExpensesQuery,
-  ValidationError,
-  GetExpensesQuery
+  ValidationError
 } from './schema'
 import { getExpenses } from './repository'
 
-export class DomainError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'DomainError'
-  }
-}
-
-type GetExpensesServiceParams = {
-  userId: string
-  queryParams: Record<string, string | undefined>
+type RawExpenseItem = {
+  entityType: 'EXPENSE'
+  expenseId: string
+  amount: number
+  currency: string
+  categoryId: string
+  description?: string
+  date: string
+  paymentMethod?: string
+  tags?: string[]
 }
 
 type ExpenseDTO = {
@@ -30,51 +29,45 @@ type ExpenseDTO = {
   tags?: string[]
 }
 
+type GetExpensesServiceParams = {
+  userId: string
+  queryParams: Record<string, string | undefined>
+}
+
 type GetExpensesServiceResult = {
   items: ExpenseDTO[]
   nextCursor?: string
 }
 
-/**
- * Caso de uso: GET /expenses
- */
 export async function getExpensesService({
   userId,
   queryParams
 }: GetExpensesServiceParams): Promise<GetExpensesServiceResult> {
   if (!userId) {
-    throw new DomainError('User not authenticated')
+    throw new Error('User not authenticated')
   }
 
-  // 1️⃣ Validación de query params
-  let query: GetExpensesQuery
-  try {
-    query = validateGetExpensesQuery(queryParams)
-  } catch (error) {
-    if (error instanceof ValidationError) {
-      throw error
-    }
-    throw new DomainError('Invalid query parameters')
-  }
+  // 1️⃣ Validar query params
+  const query = validateGetExpensesQuery(queryParams)
 
-  // 2️⃣ Query a DynamoDB
+  // 2️⃣ Obtener data de DynamoDB
   const { items, nextCursor } = await getExpenses({
     userId,
     query
   })
 
   // 3️⃣ Mapear solo EXPENSE items
-  const expenses: ExpenseDTO[] = items
+  const expenses: ExpenseDTO[] = (items as RawExpenseItem[])
     .filter(item => item.entityType === 'EXPENSE')
     .map(item => ({
-      expenseId: item.expenseId as string,
-      amount: item.amount as number,
-      currency: item.currency as string,
-      categoryId: item.categoryId as string,
-      description: item.description as string | undefined,
-      date: item.date as string,
-      paymentMethod: item.paymentMethod as string | undefined,
-      tags: item.tags as string[] | undefined
+      expenseId: item.expenseId,
+      amount: item.amount,
+      currency: item.currency,
+      categoryId: item.categoryId,
+      description: item.description,
+      date: item.date,
+      paymentMethod: item.paymentMethod,
+      tags: item.tags
     }))
 
   return {
