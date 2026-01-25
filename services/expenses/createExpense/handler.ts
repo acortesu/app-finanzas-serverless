@@ -1,5 +1,3 @@
-// services/expenses/createExpense/handler.ts
-
 import {
   APIGatewayProxyEvent,
   APIGatewayProxyResult
@@ -15,11 +13,9 @@ export const main = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
   try {
-    // 1️⃣ Obtener userId desde el authorizer
-    const userId =
-      event.requestContext.authorizer?.principalId ||
-      event.requestContext.authorizer?.userId ||
-      'dev-user'
+    // 🔐 Obtener userId desde Cognito JWT
+    const claims = event.requestContext.authorizer?.claims as any
+    const userId = claims?.sub
 
     if (!userId) {
       return response(401, {
@@ -28,7 +24,7 @@ export const main = async (
       })
     }
 
-    // 2️⃣ Parsear body
+    // 🧾 Parsear body
     if (!event.body) {
       return response(400, {
         error: 'INVALID_BODY',
@@ -38,13 +34,12 @@ export const main = async (
 
     const payload = JSON.parse(event.body)
 
-    // 3️⃣ Ejecutar caso de uso
+    // 🚀 Ejecutar caso de uso
     const result = await createExpenseService({
       userId,
       payload
     })
 
-    // 4️⃣ Success
     return response(201, {
       expenseId: result.expenseId,
       message: 'Expense created successfully'
@@ -52,7 +47,6 @@ export const main = async (
   } catch (error) {
     console.error('createExpense error:', error)
 
-    // 🔹 Validation errors
     if (error instanceof ValidationError) {
       return response(400, {
         error: 'VALIDATION_ERROR',
@@ -60,7 +54,6 @@ export const main = async (
       })
     }
 
-    // 🔹 Domain errors
     if (error instanceof DomainError) {
       return response(500, {
         error: 'DOMAIN_ERROR',
@@ -68,7 +61,6 @@ export const main = async (
       })
     }
 
-    // 🔹 Fallback
     return response(500, {
       error: 'INTERNAL_SERVER_ERROR',
       message: 'Unexpected error'
@@ -76,9 +68,6 @@ export const main = async (
   }
 }
 
-/**
- * Helper para responses HTTP
- */
 function response(
   statusCode: number,
   body: Record<string, unknown>

@@ -1,47 +1,121 @@
-import { Stack, StackProps, RemovalPolicy, Duration } from 'aws-cdk-lib'
-import { Construct } from 'constructs'
-import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
-import * as apigateway from 'aws-cdk-lib/aws-apigateway'
-import * as lambda from 'aws-cdk-lib/aws-lambda'
-import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
-import * as path from 'path'
+import {
+  Stack,
+  StackProps,
+  RemovalPolicy,
+  Duration,
+  SecretValue,
+} from "aws-cdk-lib";
+import { Construct } from "constructs";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as apigateway from "aws-cdk-lib/aws-apigateway";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import * as path from "path";
+import * as cognito from "aws-cdk-lib/aws-cognito";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 
 /**
  * Props extendidas para manejar entornos (dev / prod)
  */
 export type AppFinanzasStackProps = StackProps & {
-  stage: string
-}
+  stage: string;
+};
 
 export class AppFinanzasStack extends Stack {
-  constructor(
-    scope: Construct,
-    id: string,
-    props: AppFinanzasStackProps
-  ) {
-    super(scope, id, props)
+  constructor(scope: Construct, id: string, props: AppFinanzasStackProps) {
+    super(scope, id, props);
 
-    const { stage } = props
+    const { stage } = props;
+
+    const userPool = new cognito.UserPool(this, "FinanzasUserPool", {
+      userPoolName: `finanzas-users-${stage}`,
+      selfSignUpEnabled: false,
+      signInAliases: {
+        email: true,
+      },
+    });
+
+    const googleClientId = new secretsmanager.Secret(this, "GoogleClientId", {
+      secretStringValue: SecretValue.unsafePlainText(
+        process.env.GOOGLE_CLIENT_ID!,
+      ),
+    });
+
+    const googleClientSecret = new secretsmanager.Secret(
+      this,
+      "GoogleClientSecret",
+      {
+        secretStringValue: SecretValue.unsafePlainText(
+          process.env.GOOGLE_CLIENT_SECRET!,
+        ),
+      },
+    );
+
+    const googleIdp = new cognito.UserPoolIdentityProviderGoogle(
+      this,
+      "GoogleIdP",
+      {
+        userPool,
+        clientId: googleClientId.secretValue.unsafeUnwrap(),
+        clientSecret: googleClientSecret.secretValue.unsafeUnwrap(),
+        scopes: ["profile", "email"],
+        attributeMapping: {
+          email: cognito.ProviderAttribute.GOOGLE_EMAIL,
+          givenName: cognito.ProviderAttribute.GOOGLE_GIVEN_NAME,
+          familyName: cognito.ProviderAttribute.GOOGLE_FAMILY_NAME,
+        },
+      },
+    );
+
+    userPool.registerIdentityProvider(googleIdp);
+
+    const userPoolClient = new cognito.UserPoolClient(
+      this,
+      "FinanzasAppClient",
+      {
+        userPool,
+        generateSecret: false,
+        supportedIdentityProviders: [
+          cognito.UserPoolClientIdentityProvider.GOOGLE,
+        ],
+        oAuth: {
+          flows: {
+            authorizationCodeGrant: true,
+            implicitCodeGrant: true,
+          },
+        },
+      },
+    );
+
+    userPoolClient.node.addDependency(googleIdp);
+
+    const authorizer = new apigateway.CognitoUserPoolsAuthorizer(
+      this,
+      "FinanzasAuthorizer",
+      {
+        cognitoUserPools: [userPool],
+        authorizerName: "FinanzasCognitoAuthorizer",
+        identitySource: "method.request.header.Authorization",
+      },
+    );
 
     /*
      * DynamoDB – Single Table
      */
-    const table = new dynamodb.Table(this, 'FinanzasTable', {
+    const table = new dynamodb.Table(this, "FinanzasTable", {
       tableName: `app-finanzas-${stage}`,
       partitionKey: {
-        name: 'PK',
-        type: dynamodb.AttributeType.STRING
+        name: "PK",
+        type: dynamodb.AttributeType.STRING,
       },
       sortKey: {
-        name: 'SK',
-        type: dynamodb.AttributeType.STRING
+        name: "SK",
+        type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy:
-        stage === 'prod'
-          ? RemovalPolicy.RETAIN
-          : RemovalPolicy.DESTROY
-    })
+        stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+    });
 
     /*
      * Lambda – createExpense
@@ -49,76 +123,116 @@ export class AppFinanzasStack extends Stack {
      */
     const createExpenseLambda = new NodejsFunction(
       this,
-      'CreateExpenseLambda',
+      "CreateExpenseLambda",
       {
         runtime: lambda.Runtime.NODEJS_20_X,
         entry: path.join(
           __dirname,
-          '../../services/expenses/createExpense/handler.ts'
+          "../../services/expenses/createExpense/handler.ts",
         ),
-        handler: 'main',
+        handler: "main",
         memorySize: 256,
         timeout: Duration.seconds(10),
         environment: {
-          TABLE_NAME: table.tableName
+          TABLE_NAME: table.tableName,
         },
         bundling: {
           minify: true,
           sourceMap: true,
-          target: 'node20'
-        }
-      }
-    )
+          target: "node20",
+        },
+      },
+    );
 
-    const getExpensesLambda = new NodejsFunction(
-      this,
-      'GetExpensesLambda',
-    {
-        runtime: lambda.Runtime.NODEJS_20_X,
-        entry: path.join(
-          __dirname,
-          '../../services/expenses/getExpenses/handler.ts'
-        ),
-        handler: 'main',
-        memorySize: 256,
-        timeout: Duration.seconds(10),
-        environment: {
-          TABLE_NAME: table.tableName
-        },
-        bundling: {
-          minify: true,
-          sourceMap: true,
-          target: 'node20'
-        }
-      }
-    )
+    const getExpensesLambda = new NodejsFunction(this, "GetExpensesLambda", {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: path.join(
+        __dirname,
+        "../../services/expenses/getExpenses/handler.ts",
+      ),
+      handler: "main",
+      memorySize: 256,
+      timeout: Duration.seconds(10),
+      environment: {
+        TABLE_NAME: table.tableName,
+      },
+      bundling: {
+        minify: true,
+        sourceMap: true,
+        target: "node20",
+      },
+    });
+
+    const getExpenseLambda = new NodejsFunction(this, "GetExpenseLambda", {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: path.join(
+        __dirname,
+        "../../services/expenses/getExpense/handler.ts",
+      ),
+      handler: "main",
+      memorySize: 256,
+      timeout: Duration.seconds(10),
+      environment: {
+        TABLE_NAME: table.tableName,
+      },
+      bundling: {
+        minify: true,
+        sourceMap: true,
+        target: "node20",
+      },
+    });
+
+    // Permisos DynamoDB (solo lectura)
+    table.grantReadData(getExpenseLambda);
 
     // Permisos DynamoDB
-    table.grantReadData(getExpensesLambda)
+    table.grantReadData(getExpensesLambda);
 
     // Permisos mínimos
-    table.grantReadWriteData(createExpenseLambda)
+    table.grantReadWriteData(createExpenseLambda);
 
     /*
      * API Gateway – REST API
      */
-    const api = new apigateway.RestApi(this, 'FinanzasApi', {
+    const api = new apigateway.RestApi(this, "FinanzasApi", {
       restApiName: `Finanzas Service (${stage})`,
       deployOptions: {
-        stageName: stage
-      }
-    })
+        stageName: stage,
+      },
+    });
 
-    const expenses = api.root.addResource('expenses')
+    const expenses = api.root.addResource("expenses");
 
-    expenses.addMethod(
-  'POST',
-  new apigateway.LambdaIntegration(createExpenseLambda)
-)
+    const expenseById = expenses.addResource("{expenseId}");
 
     expenses.addMethod(
-  'GET',
-  new apigateway.LambdaIntegration(getExpensesLambda)
-)
+      "POST",
+      new apigateway.LambdaIntegration(createExpenseLambda),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ["openid", "email", "profile"],
+      },
+    );
+
+    expenses.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(getExpensesLambda),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ["openid", "email", "profile"],
+      },
+    );
+
+    expenseById.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(getExpenseLambda),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ["openid", "email", "profile"],
+      },
+    );
   }
 }

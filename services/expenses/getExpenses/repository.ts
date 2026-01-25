@@ -6,8 +6,6 @@ import {
   QueryCommand
 } from '@aws-sdk/lib-dynamodb'
 
-import { GetExpensesQuery } from './schema'
-
 const client = new DynamoDBClient({})
 const ddb = DynamoDBDocumentClient.from(client)
 
@@ -19,12 +17,14 @@ if (!TABLE_NAME) {
 
 type GetExpensesRepositoryParams = {
   userId: string
-  query: GetExpensesQuery
+  limit: number
+  cursor?: string
 }
 
 export async function getExpenses({
   userId,
-  query
+  limit,
+  cursor
 }: GetExpensesRepositoryParams): Promise<{
   items: Record<string, unknown>[]
   nextCursor?: string
@@ -33,39 +33,21 @@ export async function getExpenses({
 
   const params: any = {
     TableName: TABLE_NAME,
-    KeyConditionExpression: 'PK = :pk',
+    KeyConditionExpression:
+      'PK = :pk AND begins_with(SK, :skPrefix)',
     ExpressionAttributeValues: {
-      ':pk': pk
+      ':pk': pk,
+      ':skPrefix': 'EXPENSE#'
     },
-    Limit: query.limit,
+    Limit: limit,
     ScanIndexForward: false // newest first
   }
 
-  // Cursor (pagination)
-  if (query.cursor) {
+  // Pagination
+  if (cursor) {
     params.ExclusiveStartKey = JSON.parse(
-      Buffer.from(query.cursor, 'base64').toString('utf-8')
+      Buffer.from(cursor, 'base64').toString('utf-8')
     )
-  }
-
-  // MONTH mode
-  if (query.type === 'MONTH') {
-    params.KeyConditionExpression +=
-      ' AND begins_with(SK, :skPrefix)'
-    params.ExpressionAttributeValues[':skPrefix'] =
-      `EXPENSE#${query.month}`
-  }
-
-  // RANGE mode
-  if (query.type === 'RANGE') {
-    params.KeyConditionExpression +=
-      ' AND SK BETWEEN :from AND :to'
-
-    params.ExpressionAttributeValues[':from'] =
-      `EXPENSE#${query.from}`
-
-    params.ExpressionAttributeValues[':to'] =
-      `EXPENSE#${query.to}\uffff`
   }
 
   const result = await ddb.send(new QueryCommand(params))

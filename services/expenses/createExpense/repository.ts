@@ -29,24 +29,30 @@ export async function createExpense({
   const expenseId = randomUUID()
 
   const pk = `USER#${userId}`
-  const skExpense = `EXPENSE#${input.date}#${expenseId}`
+
+  // ✅ SK CANÓNICO DEL EXPENSE (clave directa por ID)
+  const expenseSk = `EXPENSE#${expenseId}`
 
   const month = input.date.slice(0, 7) // YYYY-MM
   const now = new Date().toISOString()
 
   const expenseItem = {
     PK: pk,
-    SK: skExpense,
+    SK: expenseSk,
     entityType: 'EXPENSE',
+
     expenseId,
     userId,
+
     amount: input.amount,
     currency: input.currency,
     categoryId: input.categoryId,
     description: input.description,
     paymentMethod: input.paymentMethod,
     tags: input.tags,
+
     date: input.date,
+    month, // útil para filtros
     createdAt: now
   }
 
@@ -62,12 +68,15 @@ export async function createExpense({
 
   const command = new TransactWriteCommand({
     TransactItems: [
+      // 1️⃣ Expense
       {
         Put: {
           TableName: TABLE_NAME,
           Item: expenseItem
         }
       },
+
+      // 2️⃣ Aggregate mensual
       {
         Update: {
           TableName: TABLE_NAME,
@@ -86,6 +95,8 @@ export async function createExpense({
           }
         }
       },
+
+      // 3️⃣ Aggregate por categoría + mes
       {
         Update: {
           TableName: TABLE_NAME,
@@ -93,10 +104,12 @@ export async function createExpense({
           UpdateExpression: `
             ADD totalAmount :amount,
                 expenseCount :one
+            SET updatedAt = :now
           `,
           ExpressionAttributeValues: {
             ':amount': input.amount,
-            ':one': 1
+            ':one': 1,
+            ':now': now
           }
         }
       }

@@ -1,16 +1,23 @@
+// services/expenses/getExpense/handler.ts
+
 import {
   APIGatewayProxyEvent,
   APIGatewayProxyResult
 } from 'aws-lambda'
 
-import { getExpensesService } from './service'
-import { ValidationError } from './schema'
+import {
+  getExpenseService,
+  NotFoundError
+} from './service'
+import {
+  ValidationError
+} from './schema'
 
 export const main = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
   try {
-    // 🔐 Obtener userId desde Cognito JWT
+    // 🔐 Obtener userId desde Cognito authorizer
     const claims = event.requestContext.authorizer?.claims as any
     const userId = claims?.sub
 
@@ -21,29 +28,37 @@ export const main = async (
       })
     }
 
-    // 🧾 Query params
-    const queryParams = event.queryStringParameters || {}
-
     // 🚀 Ejecutar caso de uso
-    const result = await getExpensesService({
+    const result = await getExpenseService({
       userId,
-      queryParams
+      pathParams: event.pathParameters
     })
 
+    // ✅ Success
     return response(200, result)
   } catch (error: unknown) {
-    console.error('getExpenses error:', error)
+    console.error('getExpense error:', error)
 
+    // 🔹 Input inválido
     if (error instanceof ValidationError) {
-      return response(400, {
+      return response(error.statusCode, {
         error: 'VALIDATION_ERROR',
         message: error.message
       })
     }
 
+    // 🔹 Recurso no encontrado
+    if (error instanceof NotFoundError) {
+      return response(error.statusCode, {
+        error: 'EXPENSE_NOT_FOUND',
+        message: error.message
+      })
+    }
+
+    // 🔹 Fallback
     if (error instanceof Error) {
       return response(500, {
-        error: 'INTERNAL_ERROR',
+        error: 'INTERNAL_SERVER_ERROR',
         message: error.message
       })
     }
@@ -55,6 +70,9 @@ export const main = async (
   }
 }
 
+/**
+ * Helper para respuestas HTTP
+ */
 function response(
   statusCode: number,
   body: Record<string, unknown>
