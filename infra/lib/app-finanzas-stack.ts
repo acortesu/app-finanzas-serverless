@@ -118,8 +118,7 @@ export class AppFinanzasStack extends Stack {
     });
 
     /*
-     * Lambda – createExpense
-     * TypeScript → esbuild (Node 20)
+     * Lambdas existentes
      */
     const createExpenseLambda = new NodejsFunction(
       this,
@@ -182,14 +181,41 @@ export class AppFinanzasStack extends Stack {
       },
     });
 
-    // Permisos DynamoDB (solo lectura)
+    /*
+     * 🔹 NUEVO: Lambda UPDATE expense
+     */
+    const updateExpenseLambda = new NodejsFunction(
+      this,
+      "UpdateExpenseLambda",
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        entry: path.join(
+          __dirname,
+          "../../services/expenses/updateExpense/handler.ts",
+        ),
+        handler: "main",
+        memorySize: 256,
+        timeout: Duration.seconds(10),
+        environment: {
+          TABLE_NAME: table.tableName,
+        },
+        bundling: {
+          minify: true,
+          sourceMap: true,
+          target: "node20",
+        },
+      },
+    );
+
+    /*
+     * Permisos DynamoDB
+     */
     table.grantReadData(getExpenseLambda);
-
-    // Permisos DynamoDB
     table.grantReadData(getExpensesLambda);
-
-    // Permisos mínimos
     table.grantReadWriteData(createExpenseLambda);
+
+    // 🔹 NUEVO: permisos para update
+    table.grantReadWriteData(updateExpenseLambda);
 
     /*
      * API Gateway – REST API
@@ -202,7 +228,6 @@ export class AppFinanzasStack extends Stack {
     });
 
     const expenses = api.root.addResource("expenses");
-
     const expenseById = expenses.addResource("{expenseId}");
 
     expenses.addMethod(
@@ -228,6 +253,19 @@ export class AppFinanzasStack extends Stack {
     expenseById.addMethod(
       "GET",
       new apigateway.LambdaIntegration(getExpenseLambda),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ["openid", "email", "profile"],
+      },
+    );
+
+    /*
+     * 🔹 NUEVO: PUT /expenses/{expenseId}
+     */
+    expenseById.addMethod(
+      "PUT",
+      new apigateway.LambdaIntegration(updateExpenseLambda),
       {
         authorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
