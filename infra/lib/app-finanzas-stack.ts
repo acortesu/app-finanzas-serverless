@@ -206,6 +206,31 @@ export class AppFinanzasStack extends Stack {
         },
       },
     );
+    /*
+     * 🔹 NUEVO: Lambda DELETE expense
+     */
+    const deleteExpenseLambda = new NodejsFunction(
+      this,
+      "DeleteExpenseLambda",
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        entry: path.join(
+          __dirname,
+          "../../services/expenses/deleteExpense/handler.ts",
+        ),
+        handler: "main",
+        memorySize: 256,
+        timeout: Duration.seconds(10),
+        environment: {
+          TABLE_NAME: table.tableName,
+        },
+        bundling: {
+          minify: true,
+          sourceMap: true,
+          target: "node20",
+        },
+      },
+    );
 
     /*
      * Permisos DynamoDB
@@ -213,6 +238,7 @@ export class AppFinanzasStack extends Stack {
     table.grantReadData(getExpenseLambda);
     table.grantReadData(getExpensesLambda);
     table.grantReadWriteData(createExpenseLambda);
+    table.grantReadWriteData(deleteExpenseLambda);
 
     // 🔹 NUEVO: permisos para update
     table.grantReadWriteData(updateExpenseLambda);
@@ -266,6 +292,19 @@ export class AppFinanzasStack extends Stack {
     expenseById.addMethod(
       "PUT",
       new apigateway.LambdaIntegration(updateExpenseLambda),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ["openid", "email", "profile"],
+      },
+    );
+
+    /*
+     * 🔹 NUEVO: DELETE /expenses/{expenseId}
+     */
+    expenseById.addMethod(
+      "DELETE",
+      new apigateway.LambdaIntegration(deleteExpenseLambda),
       {
         authorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
