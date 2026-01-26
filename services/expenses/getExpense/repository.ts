@@ -17,7 +17,7 @@ export type ExpenseItem = {
   expenseId: string
   amount: number
   currency: string
-  category: string
+  categoryId: string
   paymentMethod: string
   description?: string
   date: string

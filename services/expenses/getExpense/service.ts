@@ -25,7 +25,7 @@ export type GetExpenseResult = {
   expenseId: string
   amount: number
   currency: string
-  category: string
+  categoryId: string
   paymentMethod: string
   description?: string
   date: string
@@ -60,7 +60,7 @@ export async function getExpenseService(input: {
     expenseId: item.expenseId,
     amount: item.amount,
     currency: item.currency,
-    category: item.category,
+    categoryId: item.categoryId,
     paymentMethod: item.paymentMethod,
     description: item.description,
     date: item.date,
