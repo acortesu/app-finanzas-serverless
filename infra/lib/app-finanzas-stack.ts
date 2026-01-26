@@ -233,15 +233,94 @@ export class AppFinanzasStack extends Stack {
     );
 
     /*
+     * 🔹 NUEVO: Lambda CREATE category
+     */
+    const createCategoryLambda = new NodejsFunction(
+      this,
+      "CreateCategoryLambda",
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        entry: path.join(
+          __dirname,
+          "../../services/categories/createCategory/handler.ts",
+        ),
+        handler: "main",
+        memorySize: 256,
+        timeout: Duration.seconds(10),
+        environment: {
+          TABLE_NAME: table.tableName,
+        },
+        bundling: {
+          minify: true,
+          sourceMap: true,
+          target: "node20",
+        },
+      },
+    );
+
+    /*
+     * 🔹 NUEVO: Lambda GET categories
+     */
+    const getCategoriesLambda = new NodejsFunction(
+      this,
+      "GetCategoriesLambda",
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        entry: path.join(
+          __dirname,
+          "../../services/categories/getCategories/handler.ts",
+        ),
+        handler: "main",
+        memorySize: 256,
+        timeout: Duration.seconds(10),
+        environment: {
+          TABLE_NAME: table.tableName,
+        },
+        bundling: {
+          minify: true,
+          sourceMap: true,
+          target: "node20",
+        },
+      },
+    );
+
+    /*
+ * 🔹 NUEVO: Lambda GET category by id
+ */
+const getCategoryLambda = new NodejsFunction(
+  this,
+  "GetCategoryLambda",
+  {
+    runtime: lambda.Runtime.NODEJS_20_X,
+    entry: path.join(
+      __dirname,
+      "../../services/categories/getCategory/handler.ts",
+    ),
+    handler: "main",
+    memorySize: 256,
+    timeout: Duration.seconds(10),
+    environment: {
+      TABLE_NAME: table.tableName,
+    },
+    bundling: {
+      minify: true,
+      sourceMap: true,
+      target: "node20",
+    },
+  },
+);
+
+    /*
      * Permisos DynamoDB
      */
     table.grantReadData(getExpenseLambda);
     table.grantReadData(getExpensesLambda);
     table.grantReadWriteData(createExpenseLambda);
     table.grantReadWriteData(deleteExpenseLambda);
-
-    // 🔹 NUEVO: permisos para update
     table.grantReadWriteData(updateExpenseLambda);
+    table.grantReadWriteData(createCategoryLambda);
+    table.grantReadData(getCategoriesLambda);
+    table.grantReadData(getCategoryLambda);
 
     /*
      * API Gateway – REST API
@@ -311,5 +390,38 @@ export class AppFinanzasStack extends Stack {
         authorizationScopes: ["openid", "email", "profile"],
       },
     );
+
+    const categories = api.root.addResource("categories");
+
+    categories.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(createCategoryLambda),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ["openid", "email", "profile"],
+      },
+    );
+    categories.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(getCategoriesLambda),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ["openid", "email", "profile"],
+      },
+    );
+
+    const categoryById = categories.addResource("{categoryId}");
+
+    categoryById.addMethod(
+  "GET",
+  new apigateway.LambdaIntegration(getCategoryLambda),
+  {
+    authorizer,
+    authorizationType: apigateway.AuthorizationType.COGNITO,
+    authorizationScopes: ["openid", "email", "profile"],
+  },
+);
   }
 }
