@@ -285,30 +285,48 @@ export class AppFinanzasStack extends Stack {
     );
 
     /*
- * 🔹 NUEVO: Lambda GET category by id
- */
-const getCategoryLambda = new NodejsFunction(
-  this,
-  "GetCategoryLambda",
-  {
-    runtime: lambda.Runtime.NODEJS_20_X,
-    entry: path.join(
-      __dirname,
-      "../../services/categories/getCategory/handler.ts",
-    ),
-    handler: "main",
-    memorySize: 256,
-    timeout: Duration.seconds(10),
-    environment: {
-      TABLE_NAME: table.tableName,
-    },
-    bundling: {
-      minify: true,
-      sourceMap: true,
-      target: "node20",
-    },
-  },
-);
+     * 🔹 NUEVO: Lambda GET category by id
+     */
+    const getCategoryLambda = new NodejsFunction(this, "GetCategoryLambda", {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: path.join(
+        __dirname,
+        "../../services/categories/getCategory/handler.ts",
+      ),
+      handler: "main",
+      memorySize: 256,
+      timeout: Duration.seconds(10),
+      environment: {
+        TABLE_NAME: table.tableName,
+      },
+      bundling: {
+        minify: true,
+        sourceMap: true,
+        target: "node20",
+      },
+    });
+
+        /*
+     * 🔹 NUEVO: Lambda UPDATE category
+     */
+    const updateCategoryLambda = new NodejsFunction(this, "UpdateCategoryLambda", {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: path.join(
+        __dirname,
+        "../../services/categories/updateCategory/handler.ts",
+      ),
+      handler: "main",
+      memorySize: 256,
+      timeout: Duration.seconds(10),
+      environment: {
+        TABLE_NAME: table.tableName,
+      },
+      bundling: {
+        minify: true,
+        sourceMap: true,
+        target: "node20",
+      },
+    });
 
     /*
      * Permisos DynamoDB
@@ -321,6 +339,7 @@ const getCategoryLambda = new NodejsFunction(
     table.grantReadWriteData(createCategoryLambda);
     table.grantReadData(getCategoriesLambda);
     table.grantReadData(getCategoryLambda);
+    table.grantReadWriteData(updateCategoryLambda);
 
     /*
      * API Gateway – REST API
@@ -415,13 +434,26 @@ const getCategoryLambda = new NodejsFunction(
     const categoryById = categories.addResource("{categoryId}");
 
     categoryById.addMethod(
-  "GET",
-  new apigateway.LambdaIntegration(getCategoryLambda),
-  {
-    authorizer,
-    authorizationType: apigateway.AuthorizationType.COGNITO,
-    authorizationScopes: ["openid", "email", "profile"],
-  },
-);
+      "GET",
+      new apigateway.LambdaIntegration(getCategoryLambda),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ["openid", "email", "profile"],
+      },
+    );
+
+     /*
+     * 🔹 NUEVO: PUT /category/{categoryId}
+     */
+    categoryById.addMethod(
+      "PUT",
+      new apigateway.LambdaIntegration(updateCategoryLambda),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ["openid", "email", "profile"],
+      },
+    );
   }
 }
