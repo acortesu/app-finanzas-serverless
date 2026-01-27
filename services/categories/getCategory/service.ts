@@ -16,6 +16,13 @@ export type CategoryDTO = {
   createdAt: string
 }
 
+export class CategoryNotFoundError extends Error {
+  constructor() {
+    super('Category not found')
+    this.name = 'CategoryNotFoundError'
+  }
+}
+
 export async function getCategoryService({
   userId,
   categoryId
@@ -31,6 +38,10 @@ export async function getCategoryService({
     userId,
     categoryId: validatedCategoryId
   })
+
+  if (!item || item.isDeleted === true) {
+  throw new CategoryNotFoundError()
+}
 
   return {
     categoryId: item.categoryId as string,

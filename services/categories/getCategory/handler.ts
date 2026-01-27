@@ -4,7 +4,7 @@ import {
   APIGatewayProxyEvent,
   APIGatewayProxyResult
 } from 'aws-lambda'
-import { getCategoryService } from './service'
+import { getCategoryService, CategoryNotFoundError } from './service'
 import { response } from '../../shared/http/response'
 
 export const main = async (
@@ -31,6 +31,12 @@ export const main = async (
 
     return response(200, category)
   } catch (error: any) {
+    if (error instanceof CategoryNotFoundError) {
+      return response(404, {
+        error: 'CATEGORY_NOT_FOUND',
+        message: 'Category not found'
+      })
+    }
     const statusCode = error.statusCode ?? 500
 
     return response(statusCode, {

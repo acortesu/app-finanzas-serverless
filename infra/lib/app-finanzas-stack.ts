@@ -306,27 +306,53 @@ export class AppFinanzasStack extends Stack {
       },
     });
 
-        /*
+    /*
      * 🔹 NUEVO: Lambda UPDATE category
      */
-    const updateCategoryLambda = new NodejsFunction(this, "UpdateCategoryLambda", {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      entry: path.join(
-        __dirname,
-        "../../services/categories/updateCategory/handler.ts",
-      ),
-      handler: "main",
-      memorySize: 256,
-      timeout: Duration.seconds(10),
-      environment: {
-        TABLE_NAME: table.tableName,
+    const updateCategoryLambda = new NodejsFunction(
+      this,
+      "UpdateCategoryLambda",
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        entry: path.join(
+          __dirname,
+          "../../services/categories/updateCategory/handler.ts",
+        ),
+        handler: "main",
+        memorySize: 256,
+        timeout: Duration.seconds(10),
+        environment: {
+          TABLE_NAME: table.tableName,
+        },
+        bundling: {
+          minify: true,
+          sourceMap: true,
+          target: "node20",
+        },
       },
-      bundling: {
-        minify: true,
-        sourceMap: true,
-        target: "node20",
+    );
+
+    /*
+     * 🔹 NUEVO: Lambda DELETE category
+     */
+
+    const deleteCategoryLambda = new NodejsFunction(
+      this,
+      "DeleteCategoryLambda",
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        entry: path.join(
+          __dirname,
+          "../../services/categories/deleteCategory/handler.ts",
+        ),
+        handler: "main",
+        memorySize: 256,
+        timeout: Duration.seconds(10),
+        environment: {
+          TABLE_NAME: table.tableName,
+        },
       },
-    });
+    );
 
     /*
      * Permisos DynamoDB
@@ -340,6 +366,7 @@ export class AppFinanzasStack extends Stack {
     table.grantReadData(getCategoriesLambda);
     table.grantReadData(getCategoryLambda);
     table.grantReadWriteData(updateCategoryLambda);
+    table.grantReadWriteData(deleteCategoryLambda);
 
     /*
      * API Gateway – REST API
@@ -443,12 +470,22 @@ export class AppFinanzasStack extends Stack {
       },
     );
 
-     /*
-     * 🔹 NUEVO: PUT /category/{categoryId}
-     */
     categoryById.addMethod(
       "PUT",
       new apigateway.LambdaIntegration(updateCategoryLambda),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ["openid", "email", "profile"],
+      },
+    );
+
+    /*
+     * 🔹 NUEVO: DELETE /category/{categoryId}
+     */
+    categoryById.addMethod(
+      "DELETE",
+      new apigateway.LambdaIntegration(deleteCategoryLambda),
       {
         authorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
