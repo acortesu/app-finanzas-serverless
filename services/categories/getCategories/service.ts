@@ -33,13 +33,16 @@ export async function getCategoriesService({
     type
   })
 
-  const categories: CategoryDTO[] = items.map((item: any) => ({
-    categoryId: item.categoryId,
-    name: item.name,
-    color: item.color,
-    type: item.type,
-    createdAt: item.createdAt
-  }))
+  const categories: CategoryDTO[] = items
+    // 🔹 NUEVO: ocultar soft-deleted
+    .filter((item: any) => item.isDeleted !== true)
+    .map((item: any) => ({
+      categoryId: item.categoryId,
+      name: item.name,
+      color: item.color,
+      type: item.type,
+      createdAt: item.createdAt
+    }))
 
   return { items: categories }
 }
