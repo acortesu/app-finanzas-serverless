@@ -1,7 +1,7 @@
 // services/expenses/deleteExpense/repository.ts
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import {
   DynamoDBDocumentClient,
   QueryCommand,
@@ -102,3 +102,162 @@ export async function deleteExpense({
     }),
   );
 }
+
+export async function findExpenseById({
+  userId,
+  expenseId
+}: {
+  userId: string
+  expenseId: string
+}) {
+  const pk = `USER#${userId}`
+  const sk = `EXPENSE#${expenseId}`
+
+  const result = await ddb.send(
+    new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: pk, SK: sk }
+    })
+  )
+
+  if (!result.Item || result.Item.isDeleted === true) {
+    return undefined
+  }
+
+  return result.Item
+}
+
+export async function softDeleteExpense({
+  userId,
+  expenseId
+}: {
+  userId: string
+  expenseId: string
+}) {
+  const pk = `USER#${userId}`
+  const sk = `EXPENSE#${expenseId}`
+
+  await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: pk, SK: sk },
+      UpdateExpression: `
+        SET isDeleted = :true,
+            deletedAt = :now
+      `,
+      ExpressionAttributeValues: {
+        ':true': true,
+        ':now': new Date().toISOString()
+      }
+    })
+  )
+}
+
+export async function findExpensesByMonth({
+  userId,
+  month
+}: {
+  userId: string
+  month: string
+}) {
+  const pk = `USER#${userId}`
+
+  const result = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: {
+        ':pk': pk,
+        ':sk': 'EXPENSE#'
+      }
+    })
+  )
+
+  return (result.Items ?? []).filter(
+    item =>
+      item.month === month &&
+      item.isDeleted !== true
+  )
+}
+
+export async function recalculateMonthAggregate({
+  userId,
+  month,
+  expenses
+}: {
+  userId: string
+  month: string
+  expenses: any[]
+}) {
+  const pk = `USER#${userId}`
+
+  const totalAmount = expenses.reduce(
+    (sum, e) => sum + Number(e.amount ?? 0),
+    0
+  )
+
+  const expenseCount = expenses.length
+
+  await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: {
+        PK: pk,
+        SK: `MONTH#${month}`
+      },
+      UpdateExpression: `
+        SET totalAmount = :total,
+            expenseCount = :count,
+            updatedAt = :now
+      `,
+      ExpressionAttributeValues: {
+        ':total': totalAmount,
+        ':count': expenseCount,
+        ':now': new Date().toISOString()
+      }
+    })
+  )
+}
+
+export async function recalculateCategoryAggregate({
+  userId,
+  categoryId,
+  month,
+  expenses
+}: {
+  userId: string
+  categoryId: string
+  month: string
+  expenses: any[]
+}) {
+  const pk = `USER#${userId}`
+
+  const totalAmount = expenses.reduce(
+    (sum, e) => sum + Number(e.amount ?? 0),
+    0
+  )
+
+  const expenseCount = expenses.length
+
+  await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: {
+        PK: pk,
+        SK: `CATEGORY#${categoryId}#${month}`
+      },
+      UpdateExpression: `
+        SET totalAmount = :total,
+            expenseCount = :count,
+            updatedAt = :now
+      `,
+      ExpressionAttributeValues: {
+        ':total': totalAmount,
+        ':count': expenseCount,
+        ':now': new Date().toISOString()
+      }
+    })
+  )
+}
+
+
