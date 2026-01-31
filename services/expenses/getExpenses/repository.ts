@@ -58,8 +58,12 @@ export async function getExpenses({
       ).toString('base64')
     : undefined
 
+  const items = (result.Items ?? [])
+  .filter(item => item.entityType === 'EXPENSE')
+  .filter(item => item.isDeleted !== true)
+
   return {
-    items: result.Items ?? [],
+    items,
     nextCursor
   }
 }

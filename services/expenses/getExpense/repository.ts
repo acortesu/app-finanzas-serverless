@@ -43,5 +43,9 @@ export async function getExpenseById(
     })
   )
 
+  if (!result.Item || result.Item.isDeleted === true) {
+  return undefined
+}
+
   return result.Item as ExpenseItem | undefined
 }

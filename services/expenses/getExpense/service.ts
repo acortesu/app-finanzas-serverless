@@ -35,6 +35,9 @@ export type GetExpenseResult = {
 
 /**
  * Caso de uso: obtener un expense por ID
+ * Reglas de negocio:
+ * - El repository debe retornar `undefined`
+ *   si el expense NO existe o está `isDeleted = true`
  */
 export async function getExpenseService(input: {
   userId: string
@@ -42,15 +45,15 @@ export async function getExpenseService(input: {
 }): Promise<GetExpenseResult> {
   const { userId, pathParams } = input
 
-  // 1️⃣ Validar input (path params)
+  // Validar input (path params)
   const { expenseId } =
     validateGetExpenseParams(pathParams)
 
-  // 2️⃣ Obtener desde DynamoDB
+  // Obtener desde DynamoDB
   const item: ExpenseItem | undefined =
     await getExpenseById(userId, expenseId)
 
-  // 3️⃣ No existe (o no pertenece al usuario)
+  // No existe o está soft-deleted
   if (!item) {
     throw new NotFoundError('Expense not found')
   }
