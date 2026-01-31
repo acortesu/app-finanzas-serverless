@@ -2,67 +2,89 @@
 
 import {
   APIGatewayProxyEvent,
-  APIGatewayProxyResult
-} from 'aws-lambda'
+  APIGatewayProxyResult,
+} from "aws-lambda";
 
 import {
   deleteCategoryService,
-  CategoryNotFoundError
-} from './service'
+  CategoryNotFoundError,
+  CategoryHasExpensesError,
+} from "./service";
+
+import { validateDeleteCategoryQuery } from "./schema";
 
 function response(
   statusCode: number,
-  body?: Record<string, unknown>
+  body?: Record<string, unknown>,
 ): APIGatewayProxyResult {
   return {
     statusCode,
-    headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : ''
-  }
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : "",
+  };
 }
 
 export const main = async (
-  event: APIGatewayProxyEvent
+  event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> => {
   try {
-    const claims = event.requestContext.authorizer?.claims as any
-    const userId = claims?.sub
+    // Auth
+    const claims = event.requestContext.authorizer?.claims as any;
+    const userId = claims?.sub;
 
     if (!userId) {
       return response(401, {
-        error: 'UNAUTHORIZED',
-        message: 'Missing user authentication'
-      })
+        error: "UNAUTHORIZED",
+        message: "Missing user authentication",
+      });
     }
 
-    const categoryId = event.pathParameters?.categoryId
+    // Path param
+    const categoryId = event.pathParameters?.categoryId;
     if (!categoryId) {
       return response(400, {
-        error: 'INVALID_PATH',
-        message: 'categoryId is required'
-      })
+        error: "INVALID_PATH",
+        message: "categoryId is required",
+      });
     }
 
-    await deleteCategoryService({ userId, categoryId })
+    // Query param (cascade)
+    const { cascade } = validateDeleteCategoryQuery(
+      event.queryStringParameters ?? {},
+    );
 
-    // ✅ 204 es correcto para DELETE
+    // Delete (single call, correct contract)
+    await deleteCategoryService({
+      userId,
+      categoryId,
+      cascade,
+    });
+
+    // 204 No Content
     return {
       statusCode: 204,
-      body: ''
-    }
+      body: "",
+    };
   } catch (error) {
-    console.error('deleteCategory error:', error)
+    console.error("deleteCategory error:", error);
 
     if (error instanceof CategoryNotFoundError) {
       return response(404, {
-        error: 'CATEGORY_NOT_FOUND',
-        message: error.message
-      })
+        error: "CATEGORY_NOT_FOUND",
+        message: error.message,
+      });
+    }
+
+    if (error instanceof CategoryHasExpensesError) {
+      return response(409, {
+        error: "CATEGORY_HAS_EXPENSES",
+        message: error.message,
+      });
     }
 
     return response(500, {
-      error: 'INTERNAL_SERVER_ERROR',
-      message: 'Unexpected error'
-    })
+      error: "INTERNAL_SERVER_ERROR",
+      message: "Unexpected error",
+    });
   }
-}
+};

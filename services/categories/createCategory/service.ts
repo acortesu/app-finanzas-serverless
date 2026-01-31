@@ -9,11 +9,17 @@ import {
   CategoryAlreadyExistsError
 } from './repository'
 
+export { CategoryAlreadyExistsError }
+
 export class DomainError extends Error {}
 
 type CreateCategoryServiceParams = {
   userId: string
-  payload: unknown
+  payload: {
+    name: string
+    color: string
+    type: 'EXPENSE' | 'INCOME'
+  }
 }
 
 export async function createCategoryService({
@@ -39,7 +45,9 @@ export async function createCategoryService({
   try {
     return await createCategory({
       userId,
-      input
+      name: input.name,
+      color: input.color,
+      type: input.type
     })
   } catch (err) {
     if (err instanceof CategoryAlreadyExistsError) {
