@@ -3,60 +3,86 @@
 import {
   validateCreateExpense,
   ValidationError,
-  CreateExpenseInput
-} from './schema'
-import { createExpense as createExpenseRepo } from './repository'
+  CreateExpenseInput,
+} from "./schema";
+
+import { createExpense as createExpenseRepo } from "./repository";
+import {
+  getCategory,
+  CategoryNotFoundError,
+} from "../../categories/getCategory/repository";
 
 type CreateExpenseServiceParams = {
-  userId: string
-  payload: unknown
-}
+  userId: string;
+  payload: unknown;
+};
 
 type CreateExpenseServiceResult = {
-  expenseId: string
-}
+  expenseId: string;
+};
 
-/**
- * Error de dominio (no HTTP)
- */
 export class DomainError extends Error {
+  readonly statusCode = 400;
+
   constructor(message: string) {
-    super(message)
-    this.name = 'DomainError'
+    super(message);
+    this.name = "DomainError";
   }
 }
 
-/**
- * Caso de uso: createExpense
- */
 export async function createExpenseService({
   userId,
-  payload
+  payload,
 }: CreateExpenseServiceParams): Promise<CreateExpenseServiceResult> {
   if (!userId) {
-    throw new DomainError('User not authenticated')
+    throw new DomainError("User not authenticated");
   }
 
-  // 1️⃣ Validación
-  let input: CreateExpenseInput
+  // 1️⃣ Validación payload
+  let input: CreateExpenseInput;
   try {
-    input = validateCreateExpense(payload)
+    input = validateCreateExpense(payload);
   } catch (error) {
     if (error instanceof ValidationError) {
-      throw error
+      throw error;
     }
-    throw new DomainError('Invalid expense payload')
+    throw new DomainError("Invalid expense payload");
   }
 
-  // 2️⃣ Persistencia
+  // 2️⃣ Validar categoría
+  let category: any;
+
+  try {
+    category = await getCategory({
+      userId,
+      categoryId: input.categoryId,
+    });
+  } catch (error) {
+    if (error instanceof CategoryNotFoundError) {
+      throw new DomainError("Invalid category");
+    }
+
+    // cualquier otro error inesperado
+    throw error;
+  }
+
+  if (category.isDeleted) {
+    throw new DomainError("Invalid category");
+  }
+
+  // 3️⃣ (opcional futuro) Validar tipo
+  if (category.type !== "EXPENSE") {
+    throw new DomainError("Category must be of type EXPENSE");
+  }
+
+  // 4️⃣ Persistencia
   try {
     return await createExpenseRepo({
       userId,
-      input
-    })
+      input,
+    });
   } catch (error) {
-    // Aquí puedes mapear errores de DynamoDB más adelante
-    console.error('DynamoDB error:', error)
-    throw new DomainError('Failed to create expense')
+    console.error("DynamoDB error:", error);
+    throw new DomainError("Failed to create expense");
   }
 }
