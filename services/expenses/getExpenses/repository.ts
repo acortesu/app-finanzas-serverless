@@ -3,6 +3,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import {
   DynamoDBDocumentClient,
+  GetCommand,
   QueryCommand
 } from '@aws-sdk/lib-dynamodb'
 
@@ -65,5 +66,40 @@ export async function getExpenses({
   return {
     items,
     nextCursor
+  }
+}
+
+type GetExpensesAggregatesParams = {
+  userId: string
+  month: string // YYYY-MM
+}
+
+export async function getExpensesAggregates({
+  userId,
+  month
+}: GetExpensesAggregatesParams): Promise<{
+  totalAmount: number
+  expenseCount: number
+}> {
+  const pk = `USER#${userId}`
+  const sk = `MONTH#${month}`
+
+  const result = await ddb.send(
+    new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: pk, SK: sk }
+    })
+  )
+
+  if (!result.Item) {
+    return {
+      totalAmount: 0,
+      expenseCount: 0
+    }
+  }
+
+  return {
+    totalAmount: Number(result.Item.totalAmount ?? 0),
+    expenseCount: Number(result.Item.expenseCount ?? 0)
   }
 }
