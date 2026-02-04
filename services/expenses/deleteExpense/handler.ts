@@ -1,11 +1,8 @@
-import {
-  APIGatewayProxyEvent,
-  APIGatewayProxyResult,
-} from "aws-lambda";
-import { deleteExpenseService } from "./service";
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import { deleteExpenseService, ExpenseNotFoundError } from "./service";
 
 export const main = async (
-  event: APIGatewayProxyEvent
+  event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> => {
   try {
     // ✅ Cognito userId correcto
@@ -40,6 +37,13 @@ export const main = async (
   } catch (error) {
     console.error("deleteExpense error:", error);
 
+    if (error instanceof ExpenseNotFoundError) {
+      return response(404, {
+        error: "EXPENSE_NOT_FOUND",
+        message: error.message,
+      });
+    }
+
     return response(500, {
       error: "INTERNAL_SERVER_ERROR",
       message: "Unexpected error",
@@ -49,7 +53,7 @@ export const main = async (
 
 function response(
   statusCode: number,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
 ): APIGatewayProxyResult {
   return {
     statusCode,

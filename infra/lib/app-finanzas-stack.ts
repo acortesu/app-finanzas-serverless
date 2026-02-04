@@ -381,6 +381,32 @@ export class AppFinanzasStack extends Stack {
     );
 
     /*
+     * 🔹 NUEVO: Lambda RESTORE category
+     */
+    const restoreCategoryLambda = new NodejsFunction(
+      this,
+      "RestoreCategoryLambda",
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        entry: path.join(
+          __dirname,
+          "../../services/categories/restoreCategory/handler.ts",
+        ),
+        handler: "main",
+        memorySize: 256,
+        timeout: Duration.seconds(10),
+        environment: {
+          TABLE_NAME: table.tableName,
+        },
+        bundling: {
+          minify: true,
+          sourceMap: true,
+          target: "node20",
+        },
+      },
+    );
+
+    /*
      * Permisos DynamoDB
      */
     table.grantReadData(getExpenseLambda);
@@ -394,6 +420,7 @@ export class AppFinanzasStack extends Stack {
     table.grantReadWriteData(updateCategoryLambda);
     table.grantReadWriteData(deleteCategoryLambda);
     table.grantReadWriteData(restoreExpenseLambda);
+    table.grantReadWriteData(restoreCategoryLambda);
 
     /*
      * API Gateway – REST API
@@ -470,7 +497,7 @@ export class AppFinanzasStack extends Stack {
     const expenseRestore = expenseById.addResource("restore");
 
     expenseRestore.addMethod(
-      "PUT",
+      "POST",
       new apigateway.LambdaIntegration(restoreExpenseLambda),
       {
         authorizer,
@@ -528,6 +555,18 @@ export class AppFinanzasStack extends Stack {
     categoryById.addMethod(
       "DELETE",
       new apigateway.LambdaIntegration(deleteCategoryLambda),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizationScopes: ["openid", "email", "profile"],
+      },
+    );
+
+    const restoreCategory = categoryById.addResource("restore");
+
+    restoreCategory.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(restoreCategoryLambda),
       {
         authorizer,
         authorizationType: apigateway.AuthorizationType.COGNITO,
